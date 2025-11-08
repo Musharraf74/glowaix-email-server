@@ -1,0 +1,14 @@
+{
+  "name": "glowaix-email-server",
+  "version": "1.0.0",
+  "description": "GLOWAIX Gmail Email Sender using Node.js and Express",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "googleapis": "^132.0.0"
+  }
+}
