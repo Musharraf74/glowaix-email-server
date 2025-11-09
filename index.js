@@ -1,7 +1,14 @@
 import express from "express";
+import cors from "cors";
 import { google } from "googleapis";
 
 const app = express();
+// ✅ Allow all external frontends (like CodePen)
+app.use(cors({
+  origin: "*", // allow sab external URLs
+    methods: ["GET", "POST"],
+      allowedHeaders: ["Content-Type"]
+      }));
 app.use(express.json());
 
 const GMAIL_CREDENTIALS = {
