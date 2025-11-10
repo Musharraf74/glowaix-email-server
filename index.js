@@ -8,7 +8,7 @@ app.use(cors({
   origin: "*", // allow sab external URLs
     methods: ["GET", "POST"],
       allowedHeaders: ["Content-Type"]
-      }));
+      })); 
 app.use(express.json());
 
 const GMAIL_CREDENTIALS = {
@@ -62,6 +62,16 @@ app.post("/send-email", async (req, res) => {
   }
 });
 
+// ---- Keep-alive routes (paste these BEFORE app.listen) ----
+app.get("/", (req, res) => {
+  res.send("🟢 GLOWAIX Email Server Active and Running Smoothly!");
+  });
+
+  app.get("/ping", (req, res) => {
+    // very small stable response so cron/test won't produce huge output
+      res.send("OK");
+      });
+      // -------------------------------------------------------------
 app.listen(process.env.PORT || 5000, () =>
   console.log(`🚀 GLOWAIX Email Server Running on port ${process.env.PORT || 5000}`)
 );
