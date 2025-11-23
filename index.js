@@ -11,12 +11,12 @@ app.use(cors());
 // Upload folder
 const upload = multer({ dest: "uploads/" });
 
-// ⭐ SMTP SETTINGS (GMAIL)
+// ⭐ SMTP SETTINGS (GMAIL via Render ENV Variables)
 const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
-        user: "servicemybusinesss@gmail.com",
-        pass: "nosqtrkbwhjuyvf"   // <-- YOUR APP PASSWORD (no spaces!)
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
     }
 });
 
@@ -25,7 +25,6 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ⭐ BULK EMAIL API
 app.post("/upload-csv", upload.single("csvFile"), async (req, res) => {
     if (!req.file) {
         return res.json({ success: false, error: "No file received" });
@@ -36,44 +35,57 @@ app.post("/upload-csv", upload.single("csvFile"), async (req, res) => {
         .pipe(csv())
         .on("data", (data) => results.push(data))
         .on("end", async () => {
-            let sent = 0, failed = 0;
+            let sent = 0;
+            let failed = 0;
 
             for (let row of results) {
-                const email = row.email;
-                const subject = row.subject;
-                const body = row.body;
+
+                const email = row["Contact Email"];        // email column
+                const outreach = row["Outreach Email"];    // outreach column
+
+                if (!email || !outreach) {
+                    failed++;
+                    continue;
+                }
+
+                const outreachLines = outreach.split("\n");
+
+                // ⭐ SUBJECT = FIRST LINE of Outreach Email
+                const subject = outreachLines[0].trim();
+
+                // ⭐ BODY = Full outreach email without first line
+                const body = outreachLines.slice(1).join("\n").trim();
 
                 let mailOptions = {
-                    from: "servicemybusinesss@gmail.com",
+                    from: process.env.SMTP_USER,
                     to: email,
                     subject: subject,
-                    html: body
+                    html: body.replace(/\n/g, "<br>")
                 };
 
                 try {
                     await transporter.sendMail(mailOptions);
                     sent++;
                 } catch (err) {
+                    console.log("Sending failed:", err);
                     failed++;
                 }
 
-                await delay(3000); // 3 seconds delay between emails
+                await delay(3000); // 3 seconds delay
             }
 
             res.json({
                 success: true,
-                sent: sent,
-                failed: failed,
+                sent,
+                failed,
                 total: results.length
             });
         });
 });
 
-// Test route
 app.get("/", (req, res) => {
-    res.send("Bulk Email Server Running");
+    res.send("Bulk Email Server Running ✔");
 });
 
-// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("Server running on port", PORT));
