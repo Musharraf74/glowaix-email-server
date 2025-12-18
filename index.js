@@ -10,7 +10,7 @@ app.use(cors());
 
 const upload = multer({ dest: "uploads/" });
 
-// SMTP (Render ENV)
+// ✅ SMTP from Render ENV
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -19,12 +19,12 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// small delay (NOT 3 sec)
-const delay = (ms) => new Promise(r => setTimeout(r, ms));
+// delay
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 app.post("/upload-csv", upload.single("csvFile"), async (req, res) => {
   if (!req.file) {
-    return res.json({ success: false, error: "CSV missing" });
+    return res.json({ success: false, error: "CSV file missing" });
   }
 
   const rows = [];
@@ -33,13 +33,12 @@ app.post("/upload-csv", upload.single("csvFile"), async (req, res) => {
     .pipe(csv())
     .on("data", (row) => rows.push(row))
     .on("end", async () => {
-
       let sent = 0;
       let failed = 0;
 
       for (const row of rows) {
 
-        // 👇 EXACT Google Sheet headers
+        // ✅ EXACT column names from Google Sheet
         const email = row["Contact Email"]?.trim();
         const outreach = row["Outreach Email"]?.trim();
 
@@ -48,25 +47,26 @@ app.post("/upload-csv", upload.single("csvFile"), async (req, res) => {
           continue;
         }
 
-        // subject = first line
+        // ✅ Subject = first line
         const lines = outreach.split(/\r?\n/);
         const subject = lines[0].substring(0, 120);
 
-        const htmlBody = lines.slice(1).join("<br>");
+        // ✅ Body = FULL outreach email
+        const htmlBody = outreach.replace(/\n/g, "<br>");
 
         try {
           await transporter.sendMail({
             from: `"GLOWAIX" <${process.env.SMTP_USER}>`,
             to: email,
             subject,
-            html: htmlBody || outreach,
+            html: htmlBody,
           });
 
           sent++;
-          await delay(500); // 🔥 FAST (0.5 sec)
+          await delay(500); // 🔥 fast + safe
 
         } catch (err) {
-          console.error("MAIL ERROR:", err.message);
+          console.error("EMAIL FAILED:", email, err.message);
           failed++;
         }
       }
@@ -82,7 +82,11 @@ app.post("/upload-csv", upload.single("csvFile"), async (req, res) => {
     });
 });
 
-app.get("/", (_, res) => res.send("GLOWAIX Email Server Live"));
+app.get("/", (_, res) => {
+  res.send("✅ GLOWAIX Email Server Live");
+});
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Server running on", PORT));
+app.listen(PORT, () => {
+  console.log("Server running on port", PORT);
+});
