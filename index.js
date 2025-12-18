@@ -10,83 +10,86 @@ app.use(cors());
 
 const upload = multer({ dest: "uploads/" });
 
-// ✅ SMTP from Render ENV
+// Gmail SMTP
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
     user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
+    pass: process.env.SMTP_PASS
+  }
 });
 
-// delay
-const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+// Delay
+const delay = ms => new Promise(res => setTimeout(res, ms));
 
 app.post("/upload-csv", upload.single("csvFile"), async (req, res) => {
   if (!req.file) {
-    return res.json({ success: false, error: "CSV file missing" });
+    return res.json({ success: false, error: "No CSV uploaded" });
   }
 
-  const rows = [];
+  let rows = [];
 
   fs.createReadStream(req.file.path)
     .pipe(csv())
-    .on("data", (row) => rows.push(row))
+    .on("data", (data) => rows.push(data))
     .on("end", async () => {
+
+      console.log("CSV HEADERS:", Object.keys(rows[0]));
+
       let sent = 0;
       let failed = 0;
 
-      for (const row of rows) {
+      for (let row of rows) {
 
-        // ✅ EXACT column names from Google Sheet
-        const email = row["Contact Email"]?.trim();
-        const outreach = row["Outreach Email"]?.trim();
+        // 🔥 AUTO PICK EMAIL COLUMN
+        const email =
+          row["Contact Email"] ||
+          row["contact email"] ||
+          row["Email"] ||
+          row["email"];
+
+        const outreach =
+          row["Outreach Email"] ||
+          row["outreach email"] ||
+          row["Outreach"] ||
+          row["Email Body"];
 
         if (!email || !outreach) {
           failed++;
           continue;
         }
 
-        // ✅ Subject = first line
-        const lines = outreach.split(/\r?\n/);
-        const subject = lines[0].substring(0, 120);
-
-        // ✅ Body = FULL outreach email
-        const htmlBody = outreach.replace(/\n/g, "<br>");
+        const subject = outreach.split("\n")[0];
+        const body = outreach.replace(/\n/g, "<br>");
 
         try {
           await transporter.sendMail({
-            from: `"GLOWAIX" <${process.env.SMTP_USER}>`,
-            to: email,
-            subject,
-            html: htmlBody,
+            from: process.env.SMTP_USER,
+            to: email.trim(),
+            subject: subject.trim(),
+            html: body
           });
-
           sent++;
-          await delay(500); // 🔥 fast + safe
-
-        } catch (err) {
-          console.error("EMAIL FAILED:", email, err.message);
+        } catch (e) {
+          console.log("EMAIL ERROR:", e.message);
           failed++;
         }
-      }
 
-      fs.unlinkSync(req.file.path);
+        await delay(500); // 2 sec (safe)
+      }
 
       res.json({
         success: true,
         sent,
         failed,
-        total: rows.length,
+        total: rows.length
       });
     });
 });
 
-app.get("/", (_, res) => {
-  res.send("✅ GLOWAIX Email Server Live");
+app.get("/", (req, res) => {
+  res.send("Bulk Email Server Running ✅");
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
-});
+app.listen(PORT, () => console.log("Server running on", PORT));
