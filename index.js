@@ -10,79 +10,79 @@ app.use(cors());
 
 const upload = multer({ dest: "uploads/" });
 
-// SMTP
+// SMTP (Render ENV)
 const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-    }
+  service: "gmail",
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
 });
 
-// Delay
-function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// Normalize function
-const normalize = (str) =>
-    str ? str.replace(/\s+/g, " ").trim().toLowerCase() : "";
+// small delay (NOT 3 sec)
+const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
 app.post("/upload-csv", upload.single("csvFile"), async (req, res) => {
-    if (!req.file) return res.json({ success: false, error: "No file received" });
+  if (!req.file) {
+    return res.json({ success: false, error: "CSV missing" });
+  }
 
-    let rows = [];
+  const rows = [];
 
-    fs.createReadStream(req.file.path)
-        .pipe(csv())
-        .on("data", (data) => rows.push(data))
-        .on("end", async () => {
-            let sent = 0,
-                failed = 0;
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on("data", (row) => rows.push(row))
+    .on("end", async () => {
 
-            for (let row of rows) {
-                // Detect columns dynamically
-                let email = "";
-                let outreach = "";
+      let sent = 0;
+      let failed = 0;
 
-                for (let key in row) {
-                    let cleanKey = normalize(key);
+      for (const row of rows) {
 
-                    if (cleanKey.includes("contact") && cleanKey.includes("email"))
-                        email = row[key];
+        // 👇 EXACT Google Sheet headers
+        const email = row["Contact Email"]?.trim();
+        const outreach = row["Outreach Email"]?.trim();
 
-                    if (cleanKey.includes("outreach"))
-                        outreach = row[key];
-                }
+        if (!email || !outreach) {
+          failed++;
+          continue;
+        }
 
-                if (!email || !outreach) {
-                    failed++;
-                    continue;
-                }
+        // subject = first line
+        const lines = outreach.split(/\r?\n/);
+        const subject = lines[0].substring(0, 120);
 
-                const subject = outreach.split("\n")[0];
-                const body = outreach.replace(/\n/g, "<br>");
+        const htmlBody = lines.slice(1).join("<br>");
 
-                try {
-                    await transporter.sendMail({
-                        from: process.env.SMTP_USER,
-                        to: email.trim(),
-                        subject,
-                        html: body,
-                    });
-                    sent++;
-                } catch (e) {
-                    failed++;
-                }
+        try {
+          await transporter.sendMail({
+            from: `"GLOWAIX" <${process.env.SMTP_USER}>`,
+            to: email,
+            subject,
+            html: htmlBody || outreach,
+          });
 
-                await delay(3000);
-            }
+          sent++;
+          await delay(500); // 🔥 FAST (0.5 sec)
 
-            res.json({ success: true, sent, failed, total: rows.length });
-        });
+        } catch (err) {
+          console.error("MAIL ERROR:", err.message);
+          failed++;
+        }
+      }
+
+      fs.unlinkSync(req.file.path);
+
+      res.json({
+        success: true,
+        sent,
+        failed,
+        total: rows.length,
+      });
+    });
 });
 
-app.get("/", (req, res) => res.send("Bulk Email Server Running"));
+app.get("/", (_, res) => res.send("GLOWAIX Email Server Live"));
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server running on port", PORT));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log("Server running on", PORT));
